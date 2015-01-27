@@ -6,16 +6,29 @@ import bpy, os
 order = 1
 target = 'scene'
 
-def invoke(data_dict, context, fname, flags=None):
-    data_dict['comment'] = 'Export from Blender ' + bpy.app.version_string
-    data_dict['b_version'] = bpy.app.version
+def invoke(all_data, target_data, context, fname, flags=None):
+    target_data['paths'] = {'sounds':'./res',
+                         'meshes':'./res',
+                         'images':'./res',
+                         'materials':'./res'
+                          }
+    target_data['comment'] = 'Export from Blender ' + bpy.app.version_string
+    target_data['b_version'] = bpy.app.version
     
     if context.scene.world:
-        data_dict['ambient'] = list(context.scene.world.ambient_color)
+        target_data['ambient'] = list(context.scene.world.ambient_color)
     else:
-        data_dict['ambient'] = (0,0,0)
-    return data_dict
+        target_data['ambient'] = (0,0,0)
     
-    if flag and 'SINGLE_GEOM_MODE' in flags:
-        fname = os.path.split(fname)[-1]
-        data_dict['scene_mesh'] = os.path.splitext(fname)[0]
+    if flags and 'SINGLE_GEOM_MODE' in flags:
+        sfname = os.path.split(fname)[-1]
+        sfname = os.path.splitext(sfname)[0]
+        #sfname = os.path.join(target_data['paths']['meshes'], 
+        #                      sfname)
+        target_data['scene_mesh'] = sfname
+        if 'AUTO_EXPORT_EGG' in flags:
+            objects = [obj.name for obj in context.scene.objects if obj.type=='MESH']
+            p3d_egg_export(os.path.join(os.path.dirname(fname), sfname+'.egg'), 
+                           {}, 0, 0, 0, 1, 'tex', 'BLENDER', 'RAW', {}, 0, 1, 0, objects)
+    
+    return target_data

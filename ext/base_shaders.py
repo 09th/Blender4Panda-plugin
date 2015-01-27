@@ -101,10 +101,12 @@ def find_and_correct_spot_light_uniforms(material, sha):
 
         
 
-def invoke(data_dict, material, context, fname, flags=None):
+def invoke(all_data, target_data, material, context, fname, flags=None):
     # TODO: replace uniforms for object<->world matrices
     # replace shared uniforms (lights, camera)
     dirname = os.path.dirname(fname)
+    if 'paths' in all_data['scene']:
+        dirname = os.path.join(dirname, all_data['scene']['paths']['materials'])
     sha = gpu.export_shader(context.scene, material)
     replace_sampler_for_textures(material, sha)
     replace_attributes(material, sha)
@@ -115,9 +117,9 @@ def invoke(data_dict, material, context, fname, flags=None):
     f = open(os.path.join(dirname, material.name + '.frag'), 'w')
     f.write(sha['fragment'])
     f.close()
-    data_dict['vert'] = material.name + '.vert'
-    data_dict['frag'] = material.name + '.frag'
-    data_dict['name'] = material.name
+    target_data['vert'] = material.name + '.vert'
+    target_data['frag'] = material.name + '.frag'
+    target_data['name'] = material.name
     uniforms = []
     for unf in sha['uniforms']:
         uniform = {}
@@ -152,4 +154,4 @@ def invoke(data_dict, material, context, fname, flags=None):
                     '''
             uniform[key] = val
         uniforms.append(uniform)
-    data_dict['uniforms'] = uniforms
+    target_data['uniforms'] = uniforms
