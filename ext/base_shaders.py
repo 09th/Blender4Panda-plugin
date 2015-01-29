@@ -1,4 +1,4 @@
-import bpy, gpu, os, re, sys, shutil, bpy_extras
+import bpy, gpu, os, re, sys, shutil, bpy_extras, math
 
 order = 1
 target = 'material'
@@ -87,17 +87,23 @@ def replace_attributes(material, sha):
 
 
 def find_and_correct_spot_light_uniforms(material, sha):
-    for unfs in re.findall('lamp_visibility_spot\((unf[0-9]+), (unf[0-9]+)', sha['fragment']):
-        circle, blend = unfs
-        # temporary to test, empiric values
+    # find links to needed lamps
+    l_links = {}
+    for unfs in re.findall('lamp_visibility_spot_circle\((unf[0-9]+), tmp[0-9]+, (tmp[0-9]+)\)', sha['fragment']):
+        link_unf,tmp = unfs
+        for unf in sha['uniforms']:
+            if unf['varname'] == link_unf:
+                #l_links[tmp] = bpy.data.objects[unf['lamp']].data
+                l_links[tmp] = unf['lamp'].data
+                break
+    # find uniforms
+    for unfs in re.findall('lamp_visibility_spot\((unf[0-9]+), (unf[0-9]+), (tmp[0-9]+)', sha['fragment']):
+        cutoff, blend, tmp = unfs
         for i, unf in enumerate(sha['uniforms']):
-            if unf['varname'] == circle:
-                #sha['uniforms'][i]['value'] = 0.97 #30
-                sha['uniforms'][i]['value'] = 0.8 #75
-                sha['uniforms'][i]['value'] = 0.75 #90
+            if unf['varname'] == cutoff:
+                sha['uniforms'][i]['value'] = math.cos(l_links[tmp].spot_size*0.5)
             if unf['varname'] == blend:
-                #sha['uniforms'][i]['value'] = 0.015 #(0.2:0.0)
-                sha['uniforms'][i]['value'] = 0.03
+                sha['uniforms'][i]['value'] = (1.0-math.cos(l_links[tmp].spot_size*0.5))*l_links[tmp].spot_blend
 
         
 
