@@ -3,9 +3,31 @@ import bpy, gpu, os, re, sys, shutil, bpy_extras, math
 order = 1
 target = 'material'
 
+SHARED_TYPES = {gpu.GPU_DYNAMIC_LAMP_DYNVEC:'vec',
+                gpu.GPU_DYNAMIC_LAMP_DYNCO:'co',
+                gpu.GPU_DYNAMIC_LAMP_DYNIMAT:'imat',
+                gpu.GPU_DYNAMIC_LAMP_DYNPERSMAT:'persmat',
+                gpu.GPU_DYNAMIC_LAMP_DYNENERGY:'energy',
+                gpu.GPU_DYNAMIC_LAMP_DYNCOL:'col',
+                gpu.GPU_DYNAMIC_SAMPLER_2DSHADOW:'shadow_samp',
+                'distance':'distance',
+                'spot_cutoff': 'cutoff',
+                'spot_blend': 'blend'
+               }
 
 #import bpy, os, sys, shutil
 #import bpy_extras
+
+def safe_var_name(name):
+    return re.sub('[^a-z0-9_]+', '_', name, flags=re.IGNORECASE)
+
+def light_name_to_obj_name(l_name):
+    # Object and appropriate light can have different names,
+    # we find object name by light name
+    for obj in bpy.data.objects:
+        if obj.type == 'LAMP':
+            if obj.data.name == l_name:
+                return obj.name
 
 def convertFileNameToPanda(filename):
   """ (Get from Chicken) Converts Blender filenames to Panda 3D filenames.
@@ -14,6 +36,7 @@ def convertFileNameToPanda(filename):
   if os.name == 'nt' and path.find(':') != -1:
     path = '/'+ path[0].lower() + path[2:]
   return path
+
 
 def save_image(img, file_path, text_path):
     if img.filepath:
@@ -89,23 +112,79 @@ def replace_attributes(material, sha):
 def find_and_correct_spot_light_uniforms(material, sha):
     # find links to needed lamps
     l_links = {}
-    for unfs in re.findall('lamp_visibility_spot_circle\((unf[0-9]+), tmp[0-9]+, (tmp[0-9]+)\)', sha['fragment']):
+    for unfs in re.findall('lamp_visibility_spot_circle\(([a-zA-Z0-9_]+), tmp[0-9]+, (tmp[0-9]+)', sha['fragment']):
+        #print('+1+', unfs)
         link_unf,tmp = unfs
         for unf in sha['uniforms']:
             if unf['varname'] == link_unf:
-                #l_links[tmp] = bpy.data.objects[unf['lamp']].data
                 l_links[tmp] = unf['lamp'].data
                 break
     # find uniforms
     for unfs in re.findall('lamp_visibility_spot\((unf[0-9]+), (unf[0-9]+), (tmp[0-9]+)', sha['fragment']):
+        #print('+2+', unfs)
         cutoff, blend, tmp = unfs
         for i, unf in enumerate(sha['uniforms']):
             if unf['varname'] == cutoff:
                 sha['uniforms'][i]['value'] = math.cos(l_links[tmp].spot_size*0.5)
+                #sha['uniforms'][i]['lamp'] = light_name_to_obj_name(l_links[tmp].name)
+                sha['uniforms'][i]['lamp'] = l_links[tmp]
+                sha['uniforms'][i]['type'] = 'spot_cutoff'
             if unf['varname'] == blend:
                 sha['uniforms'][i]['value'] = (1.0-math.cos(l_links[tmp].spot_size*0.5))*l_links[tmp].spot_blend
+                #sha['uniforms'][i]['lamp'] = light_name_to_obj_name(l_links[tmp].name)
+                sha['uniforms'][i]['lamp'] = l_links[tmp]
+                sha['uniforms'][i]['type'] = 'spot_blend'
 
-        
+def find_material_with_same_unf_name(all_data, unf):
+    for mname, material in all_data['materials'].items():
+        for cmp_unf in material['uniforms']:
+            if cmp_unf['varname'] == unf['varname']:
+                return mname
+
+def add_lamp_name_for_unf_type16(sha):
+    '''void lamp_falloff_invlinear(float lampdist, float dist, out float visifac)
+       void lamp_falloff_invsquare(float lampdist, float dist, out float visifac)
+       void lamp_falloff_sliders(float lampdist, float ld1, float ld2, float dist, out float visifac)
+       void lamp_falloff_curve(float lampdist, sampler2D curvemap, float dist, out float visifac)
+       void lamp_visibility_sphere(float lampdist, float dist, float visifac, out float outvisifac)
+    '''
+    '''void lamp_visibility_sun_hemi(vec3 lampvec, out vec3 lv, out float dist, out float visifac)
+       void lamp_visibility_other(vec3 co, vec3 lampco, out vec3 lv, out float dist, out float visifac)
+    '''
+    l_links = {}
+    for unfs in re.findall('lamp_visibility_other\(varposition, ([a-zA-Z0-9_]+), tmp[0-9]+, (tmp[0-9]+)', sha['fragment']):
+        #print('+1+', unfs)
+        link_unf,tmp = unfs
+        for unf in sha['uniforms']:
+            if unf['varname'] == link_unf:
+                l_links[tmp] = unf['lamp'].data
+                break
+    for re_str in ('lamp_falloff_invsquare\((unf[0-9]+), (tmp[0-9]+)',
+                   'lamp_falloff_invlinear\((unf[0-9]+), (tmp[0-9]+)'
+                   ):
+        for unfs in re.findall(re_str, sha['fragment']):
+            #print('+2+', unfs)
+            unf16, dist_tmp = unfs
+            if dist_tmp in l_links.keys():
+                for i, unf in enumerate(sha['uniforms']):
+                    if unf['varname'] == unf16:
+                        sha['uniforms'][i]['lamp'] = l_links[dist_tmp]
+                        sha['uniforms'][i]['type'] = 'distance'
+
+
+
+def replace_names_for_shared_uniforms(sha):
+    for i, unf in enumerate(sha['uniforms']):
+        if unf['type'] in SHARED_TYPES.keys():
+            if 'lamp' in unf:
+                new_varname = safe_var_name(unf['lamp'].name + '_'\
+                              + SHARED_TYPES[unf['type']]\
+                              + '_' + str(unf['datatype']))
+                #sha['fragment'] = sha['fragment'].replace(unf['varname'], new_varname)
+                sha['fragment'] = re.sub(unf['varname']+'([^a-zA-Z0-9_]+)', new_varname+'\g<1>', sha['fragment'])
+                sha['uniforms'][i]['varname'] = new_varname
+            else:
+                print(unf, 'WARNING: hasn\'t lamp attribute')
 
 def invoke(all_data, target_data, material, context, fname, flags=None):
     # TODO: replace uniforms for object<->world matrices
@@ -114,9 +193,11 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
     if 'paths' in all_data['scene']:
         dirname = os.path.join(dirname, all_data['scene']['paths']['materials'])
     sha = gpu.export_shader(context.scene, material)
+    add_lamp_name_for_unf_type16(sha)
+    find_and_correct_spot_light_uniforms(material, sha)
+    replace_names_for_shared_uniforms(sha)
     replace_sampler_for_textures(material, sha)
     replace_attributes(material, sha)
-    find_and_correct_spot_light_uniforms(material, sha)
     f = open(os.path.join(dirname, material.name + '.vert'), 'w')
     f.write(sha['vertex'])
     f.close()
@@ -133,7 +214,7 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
             if key == 'lamp':
                 val = val.name
             elif key == 'image':
-                saved_img = save_image(val, fname, '')
+                saved_img = save_image(val, fname, all_data['scene']['paths']['images'])
                 val = saved_img
                 #val = os.path.split(val.filepath)[1]
             elif key == 'texpixels':
@@ -142,22 +223,11 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
                 f = open(os.path.join(dirname, fname), 'wb')
                 f.write(val)
                 f.close()
-                val = fname
-            elif key == 'type':
-                if val == 16: 
-                    # Try to find accordance between unifrom with 
-                    # type 16 (light distance) and light
-                    uniform['lamp'] = bpy.data.lamps[0].name
-                    '''
-                    lamps = [l for l in bpy.data.lamps if l.type in ('POINT', 'HEMI')]
-                    unfs = [u for u in sha['uniforms'] if u['type']==16]
-                    idx = unfs.index(unf)
-                    if len(unfs) == len(lamps):
-                        uniform['lamp'] = lamps[idx].name
-                    else:
-                        uniform['lamp'] = lamps[0].name
-                        print('WARNING: can\'t find Lamp for uniform', unf)
-                    '''
-            uniform[key] = val
+                val = os.path.join(all_data['scene']['paths']['materials'], 
+                                   fname).replace('\\\\','/')
+
+
+            if not key in uniform.keys():
+                uniform[key] = val
         uniforms.append(uniform)
     target_data['uniforms'] = uniforms

@@ -583,10 +583,10 @@ class ExportScene(bpy.types.Operator, ExportHelper):
             
     single_geom_mode = BoolProperty(name="Single geom mode",
                                     description="All scene static geometry will store in single file", 
-                                    default=False)
+                                    default=True)
     auto_export_egg = BoolProperty(name="Auto export .EGG",
                                    description="Automatically export all needed EGG files (YABEE required).", 
-                                   default=False)
+                                   default=True)
 
     
     def draw(self, context):
