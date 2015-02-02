@@ -91,21 +91,34 @@ def replace_sampler_for_textures(material, sha):
                             break
                         i += 1
 
-
+def find_idx_for_texcoord(name):
+    # Not sure that this index calculation would be work as expected
+    if name == 0:
+        return 0
+    for obj in bpy.data.objects:
+        for i,uv in enumerate(obj.data.uv_layers):
+            if uv.name == name:
+                return i
 
 def replace_attributes(material, sha):
+    new_atts = []
     for att in sha['attributes']:
         if att['type'] == gpu.CD_MTFACE:
-            idx = 0
-            if type(att['name']) == int:
-                idx = att['name']
-            new_att_name = 'p3d_MultiTexCoord' + str(idx)
+            #idx = att['number']-1
+            new_att_name = 'p3d_MultiTexCoord' + str(find_idx_for_texcoord(att['name']))
         if att['type'] == gpu.CD_TANGENT:
             new_att_name = 'p3d_Tangent'
         if att['type'] == gpu.CD_MCOL:
             new_att_name = 'p3d_Color'
+        if new_att_name in new_atts:
+            print('WARNING: Duplicated attribute', new_att_name)
+            #print('(attribute vec[0-9] '+att['varname']+';)')
+            sha['vertex'] = re.sub('(attribute vec[0-9] '+att['varname']+';)','//\g<1>', sha['vertex'])
+
         sha['fragment'] = sha['fragment'].replace(att['varname'], new_att_name)
         sha['vertex'] = sha['vertex'].replace(att['varname'], new_att_name)
+        new_atts.append(new_att_name)
+            
 
 
 
