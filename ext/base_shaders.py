@@ -172,6 +172,11 @@ def add_lamp_name_for_unf_type16(sha):
                         sha['uniforms'][i]['type'] = 'distance'
 
 
+def solve_duplicate_names(sha, name, cnt=0):
+    for i, unf in enumerate(sha['uniforms']):
+        if unf['varname'] == name:
+            return solve_duplicate_names(sha, name+'_'+str(cnt), cnt+1)
+    return name
 
 def replace_names_for_shared_uniforms(sha):
     for i, unf in enumerate(sha['uniforms']):
@@ -180,6 +185,7 @@ def replace_names_for_shared_uniforms(sha):
                 new_varname = safe_var_name(unf['lamp'].name + '_'\
                               + SHARED_TYPES[unf['type']]\
                               + '_' + str(unf['datatype']))
+                new_varname = solve_duplicate_names(sha, new_varname)
                 #sha['fragment'] = sha['fragment'].replace(unf['varname'], new_varname)
                 sha['fragment'] = re.sub(unf['varname']+'([^a-zA-Z0-9_]+)', new_varname+'\g<1>', sha['fragment'])
                 sha['uniforms'][i]['varname'] = new_varname
@@ -214,8 +220,12 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
             if key == 'lamp':
                 val = val.name
             elif key == 'image':
-                saved_img = save_image(val, fname, all_data['scene']['paths']['images'])
-                val = saved_img
+                if unf['type'] != 'p3d_texture':
+                    saved_img = save_image(val, fname, all_data['scene']['paths']['images'])
+                    #val = saved_img
+                    val = fname
+                else:
+                    val = ''
                 #val = os.path.split(val.filepath)[1]
             elif key == 'texpixels':
                 #val = ''
@@ -223,8 +233,9 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
                 f = open(os.path.join(dirname, fname), 'wb')
                 f.write(val)
                 f.close()
-                val = os.path.join(all_data['scene']['paths']['materials'], 
-                                   fname).replace('\\\\','/')
+                #val = os.path.join(all_data['scene']['paths']['materials'], 
+                #                   fname).replace('\\','/')
+                val = fname
 
 
             if not key in uniform.keys():

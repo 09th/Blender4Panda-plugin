@@ -591,7 +591,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
     
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "single_geom_mode")
+        #layout.prop(self, "single_geom_mode")
         layout.prop(self, "auto_export_egg")
         
 

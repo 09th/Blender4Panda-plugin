@@ -7,10 +7,10 @@ order = 1
 target = 'scene'
 
 def invoke(all_data, target_data, context, fname, flags=None):
-    target_data['paths'] = {'sounds':'./res',
-                         'meshes':'./res',
-                         'images':'./res',
-                         'materials':'./res'
+    target_data['paths'] = {'sounds':'res',
+                         'meshes':'res',
+                         'images':'res',
+                         'materials':'res'
                           }
     target_data['comment'] = 'Export from Blender ' + bpy.app.version_string
     target_data['b_version'] = bpy.app.version
