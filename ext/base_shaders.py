@@ -96,9 +96,10 @@ def find_idx_for_texcoord(name):
     if name == 0:
         return 0
     for obj in bpy.data.objects:
-        for i,uv in enumerate(obj.data.uv_layers):
-            if uv.name == name:
-                return i
+        if obj.type == 'MESH':
+            for i,uv in enumerate(obj.data.uv_layers):
+                if uv.name == name:
+                    return i
 
 def replace_attributes(material, sha):
     new_atts = []
@@ -106,10 +107,14 @@ def replace_attributes(material, sha):
         if att['type'] == gpu.CD_MTFACE:
             #idx = att['number']-1
             new_att_name = 'p3d_MultiTexCoord' + str(find_idx_for_texcoord(att['name']))
-        if att['type'] == gpu.CD_TANGENT:
+        elif att['type'] == gpu.CD_TANGENT:
             new_att_name = 'p3d_Tangent'
-        if att['type'] == gpu.CD_MCOL:
+        elif att['type'] == gpu.CD_MCOL:
             new_att_name = 'p3d_Color'
+        elif att['type'] == gpu.CD_ORCO:
+            new_att_name = 'p3d_Vertex' # Not sure that it's what wee need, but I have no another ideas
+        else:
+            raise Exception('Unknown attribute %s in %s material' % (att['name'], material.name))
         if new_att_name in new_atts:
             print('WARNING: Duplicated attribute', new_att_name)
             #print('(attribute vec[0-9] '+att['varname']+';)')
@@ -130,7 +135,7 @@ def find_and_correct_spot_light_uniforms(material, sha):
         link_unf,tmp = unfs
         for unf in sha['uniforms']:
             if unf['varname'] == link_unf:
-                l_links[tmp] = unf['lamp'].data
+                l_links[tmp] = unf['lamp']
                 break
     # find uniforms
     for unfs in re.findall('lamp_visibility_spot\((unf[0-9]+), (unf[0-9]+), (tmp[0-9]+)', sha['fragment']):
@@ -138,12 +143,12 @@ def find_and_correct_spot_light_uniforms(material, sha):
         cutoff, blend, tmp = unfs
         for i, unf in enumerate(sha['uniforms']):
             if unf['varname'] == cutoff:
-                sha['uniforms'][i]['value'] = math.cos(l_links[tmp].spot_size*0.5)
+                sha['uniforms'][i]['value'] = math.cos(l_links[tmp].data.spot_size*0.5)
                 #sha['uniforms'][i]['lamp'] = light_name_to_obj_name(l_links[tmp].name)
                 sha['uniforms'][i]['lamp'] = l_links[tmp]
                 sha['uniforms'][i]['type'] = 'spot_cutoff'
             if unf['varname'] == blend:
-                sha['uniforms'][i]['value'] = (1.0-math.cos(l_links[tmp].spot_size*0.5))*l_links[tmp].spot_blend
+                sha['uniforms'][i]['value'] = (1.0-math.cos(l_links[tmp].data.spot_size*0.5))*l_links[tmp].data.spot_blend
                 #sha['uniforms'][i]['lamp'] = light_name_to_obj_name(l_links[tmp].name)
                 sha['uniforms'][i]['lamp'] = l_links[tmp]
                 sha['uniforms'][i]['type'] = 'spot_blend'
@@ -170,7 +175,7 @@ def add_lamp_name_for_unf_type16(sha):
         link_unf,tmp = unfs
         for unf in sha['uniforms']:
             if unf['varname'] == link_unf:
-                l_links[tmp] = unf['lamp'].data
+                l_links[tmp] = unf['lamp']
                 break
     for re_str in ('lamp_falloff_invsquare\((unf[0-9]+), (tmp[0-9]+)',
                    'lamp_falloff_invlinear\((unf[0-9]+), (tmp[0-9]+)'
