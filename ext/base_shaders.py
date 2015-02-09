@@ -87,7 +87,7 @@ def replace_sampler_for_textures(material, sha):
                             new_unf_name = 'p3d_Texture' + str(i)
                             sha['fragment'] = sha['fragment'].replace(unf['varname'], new_unf_name)
                             unf['varname'] = new_unf_name
-                            unf['type'] = 'p3d_texture'
+                            unf['type'] = '_ignore_'
                             break
                         i += 1
 
@@ -125,7 +125,24 @@ def replace_attributes(material, sha):
         new_atts.append(new_att_name)
             
 
+def replace_common_uniforms(sha):
+    #p3d_ModelViewMatrixInverse
+    for unf in sha['uniforms']:
+        new_unf_name = None
+        if unf['type'] == gpu.GPU_DYNAMIC_OBJECT_VIEWMAT:
+            new_unf_name = 'p3d_ModelViewMatrix'
+        if unf['type'] == gpu.GPU_DYNAMIC_OBJECT_VIEWIMAT:
+            new_unf_name = 'p3d_ModelViewMatrixInverse'
+        if unf['type'] == gpu.GPU_DYNAMIC_OBJECT_MAT:
+            new_unf_name = 'p3d_ModelMatrix'
+        if unf['type'] == gpu.GPU_DYNAMIC_OBJECT_IMAT:
+            new_unf_name = 'p3d_ModelMatrixInverse'
 
+        if new_unf_name:
+            sha['vertex'] = sha['vertex'].replace(unf['varname'], new_unf_name)
+            sha['fragment'] = sha['fragment'].replace(unf['varname'], new_unf_name)
+            unf['varname'] = new_unf_name
+            unf['type'] = '_ignore_'
 
 def find_and_correct_spot_light_uniforms(material, sha):
     # find links to needed lamps
@@ -211,8 +228,6 @@ def replace_names_for_shared_uniforms(sha):
                 print(unf, 'WARNING: hasn\'t lamp attribute')
 
 def invoke(all_data, target_data, material, context, fname, flags=None):
-    # TODO: replace uniforms for object<->world matrices
-    # replace shared uniforms (lights, camera)
     dirname = os.path.dirname(fname)
     if 'paths' in all_data['scene']:
         dirname = os.path.join(dirname, all_data['scene']['paths']['materials'])
@@ -220,6 +235,7 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
     add_lamp_name_for_unf_type16(sha)
     find_and_correct_spot_light_uniforms(material, sha)
     replace_names_for_shared_uniforms(sha)
+    replace_common_uniforms(sha)
     replace_sampler_for_textures(material, sha)
     replace_attributes(material, sha)
     f = open(os.path.join(dirname, material.name + '.vert'), 'w')
@@ -241,7 +257,7 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
                 if unf['type'] != 'p3d_texture':
                     saved_img = save_image(val, fname, all_data['scene']['paths']['images'])
                     #val = saved_img
-                    val = fname
+                    val = os.path.split(saved_img)[1]
                 else:
                     val = ''
                 #val = os.path.split(val.filepath)[1]
