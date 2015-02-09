@@ -607,35 +607,39 @@ class ExportScene(bpy.types.Operator, ExportHelper):
                        'assets':{},
                        'materials':{}
                        }
-        # Scene
+        
+        for e in extensions:
+            if e.target == 'prepare':
+                e.invoke(export_dict, context, self.filepath, flags)
+        
         for e in extensions:
             if e.target == 'scene':
                 e.invoke(export_dict, export_dict['scene'], context, self.filepath, flags)
-        # Materials
-        for material in bpy.data.materials:
-            mat_dict = {}
-            for e in extensions:
-                if e.target == 'material':
+            elif e.target == 'material':
+                for material in bpy.data.materials:
+                    mat_dict = {}
                     e.invoke(export_dict, mat_dict, material, context, self.filepath, flags)
-            if mat_dict:
-                export_dict['materials'][material.name] = mat_dict
-        # Objects
-        for obj in context.scene.objects:
-            obj_dict = {}
-            for e in extensions:
-                if e.target == 'object':
+                    if mat_dict:
+                        export_dict['materials'][material.name] = mat_dict
+            elif e.target == 'object':
+                for obj in context.scene.objects:
+                    obj_dict = {}
                     e.invoke(export_dict, obj_dict, obj, context, self.filepath, flags)
-            if obj_dict:
-                export_dict['objects'][obj.name] = obj_dict
-        # Assets
-        for asset in context.scene.se4p3d.assets_list:
-            asset_dict = {}
-            for e in extensions:
-                if e.target == 'asset':
+                    if obj_dict:
+                        export_dict['objects'][obj.name] = obj_dict
+            elif e.target == 'asset':
+                asset_dict = {}
+                for asset in context.scene.se4p3d.assets_list:
                     e.invoke(export_dict, asset_dict, asset, context, self.filepath, flags)
-            if asset_dict:
-                export_dict['assets'][asset.name] = asset_dict
-
+                    if asset_dict:
+                        export_dict['assets'][asset.name] = asset_dict
+            elif e.target not in ('prepare', 'finishing'):
+                print('ERROR:EXTENSION: unknown target "%s"' % e.target)
+                
+        for e in extensions:
+            if e.target == 'finishing':
+                e.invoke(export_dict, context, self.filepath, flags)
+       
         
         f = open(self.filepath, 'w')
         f.write(json.dumps(export_dict, indent=4))
