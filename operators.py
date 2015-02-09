@@ -618,18 +618,24 @@ class ExportScene(bpy.types.Operator, ExportHelper):
             elif e.target == 'material':
                 for material in bpy.data.materials:
                     mat_dict = {}
+                    if material.name in export_dict['materials']:
+                        mat_dict = export_dict['materials'][material.name]
                     e.invoke(export_dict, mat_dict, material, context, self.filepath, flags)
                     if mat_dict:
                         export_dict['materials'][material.name] = mat_dict
             elif e.target == 'object':
                 for obj in context.scene.objects:
                     obj_dict = {}
+                    if obj.name in export_dict['objects']:
+                        obj_dict = export_dict['objects'][obj.name]
                     e.invoke(export_dict, obj_dict, obj, context, self.filepath, flags)
                     if obj_dict:
                         export_dict['objects'][obj.name] = obj_dict
             elif e.target == 'asset':
-                asset_dict = {}
                 for asset in context.scene.se4p3d.assets_list:
+                    asset_dict = {}
+                    if asset.name in export_dict['assets']:
+                        asset_dict = export_dict['assets'][asset.name]
                     e.invoke(export_dict, asset_dict, asset, context, self.filepath, flags)
                     if asset_dict:
                         export_dict['assets'][asset.name] = asset_dict
