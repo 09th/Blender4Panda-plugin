@@ -7,9 +7,9 @@ target = 'object'
 
 def invoke(all_data, target_data, obj, context, fname, flags=None):
     if flags:
-        if 'SINGLE_GEOM_MODE' in flags and obj.type == 'MESH':
-            return #target_data
-        if 'AUTO_EXPORT_EGG' in flags and obj.type == 'MESH':
+        #if 'SINGLE_GEOM_MODE' in flags and obj.type == 'MESH':
+        #    return #target_data
+        if not 'SINGLE_GEOM_MODE' in flags and 'AUTO_EXPORT_EGG' in flags and obj.type == 'MESH':
             path = os.path.join(os.path.split(fname)[0], 'res', obj.name + '.egg')
             p3d_egg_export(path, {}, 0, 0, 0, 1, 'tex', 'BLENDER', 'RAW', {}, 0, 1, 0, [obj.name,])
     mat = []

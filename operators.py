@@ -648,7 +648,7 @@ class ExportScene(bpy.types.Operator, ExportHelper):
        
         
         f = open(self.filepath, 'w')
-        f.write(json.dumps(export_dict, indent=4))
+        f.write(json.dumps(export_dict, indent=4, sort_keys=True))
         f.close()
         return {'FINISHED'}
 
