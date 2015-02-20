@@ -59,6 +59,7 @@ def invoke(all_data, target_data, obj, context, fname, flags=None):
             con_dict['linear_limits'] = ((con.limit_min_x, con.limit_max_x),
                                          (con.limit_min_y, con.limit_max_y),
                                          (con.limit_min_z, con.limit_max_z))
+            con_dict['use_linked_collision'] =  con.use_linked_collision
             constraints.append(con_dict)
     if constraints:
         target_data['constraints'] = constraints
