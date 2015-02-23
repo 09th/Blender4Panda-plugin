@@ -16,9 +16,9 @@ def invoke(all_data, target_data, context, fname, flags=None):
     target_data['b_version'] = bpy.app.version
     
     if context.scene.world:
-        target_data['ambient'] = list(context.scene.world.ambient_color)
-    else:
-        target_data['ambient'] = (0,0,0)
+        target_data['ambient_color'] = list(context.scene.world.ambient_color)
+        target_data['horizon_color'] = list(context.scene.world.horizon_color)
+
     
     if flags and 'SINGLE_GEOM_MODE' in flags:
         sfname = os.path.split(fname)[-1]
