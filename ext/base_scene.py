@@ -29,6 +29,6 @@ def invoke(all_data, target_data, context, fname, flags=None):
         if 'AUTO_EXPORT_EGG' in flags:
             objects = [obj.name for obj in context.scene.objects if obj.type=='MESH']
             p3d_egg_export(os.path.join(os.path.dirname(fname), target_data['paths']['meshes'], sfname+'.egg'), 
-                           {}, 0, 0, 0, 1, 'tex', 'BLENDER', 'RAW', {}, 0, 1, 0, objects)
+                           {}, 0, 0, 0, 0, 1, 'tex', 'BLENDER', 'RAW', {}, 0, 1, 0, objects)
     
     return target_data
