@@ -1,4 +1,8 @@
-import os, bpy
+import os, bpy, bpy_extras, re
+
+
+def safe_var_name(name):
+    return re.sub('[^a-z0-9_]+', '_', name, flags=re.IGNORECASE)
 
 def convertFileNameToPanda(filename):
   """ (Get from Chicken) Converts Blender filenames to Panda 3D filenames.

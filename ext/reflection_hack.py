@@ -1,4 +1,5 @@
 import os, re
+from .utils import save_image, safe_var_name
 
 order = 50
 target = 'material'
@@ -6,6 +7,7 @@ target = 'material'
 def invoke(all_data, target_data, material, context, fname, flags=None):
     tex_count = 0
     color_tex_count = 0
+    normal_tex_count = 0
     color_tex_idx = 0
     envmap = None
     for tex in material.texture_slots:
@@ -16,11 +18,15 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
                     if tex.use_map_color_diffuse:
                         color_tex_count += 1
                         color_tex_idx = tex_count - 1
+                    if tex.use_map_normal:
+                        normal_tex_count += 1
             elif tex.texture.type == 'ENVIRONMENT_MAP':
                 if tex.texture.environment_map.source == 'IMAGE_FILE':
                     if tex.texture.image and tex.texture.image.source == 'FILE':
                         envmap = tex
                         #break
+                else:
+                    envmap = tex
     if not envmap: # Exit here if envmap not found in texture slots
         return False
     
@@ -44,6 +50,7 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
 uniform mat4 p3d_ViewMatrix; // world to view transformation
 uniform mat4 p3d_ViewMatrixInverse; // view to world transformation
 varying vec3 varreflect;
+varying vec3 varviewdir; // this will bee need if normalmap using
 // insert by Reflection hack end >
 '''
     # Insert before first varying declaration
@@ -52,9 +59,9 @@ varying vec3 varreflect;
     ins = '''
     // < insert by Reflection hack start (calculation)
     vec4 viewDirectionInViewSpace = co - vec4(0.0, 0.0, 0.0, 1.0);
-    vec3 viewDirection =  vec3(p3d_ViewMatrixInverse * viewDirectionInViewSpace);
+    varviewdir =  vec3(p3d_ViewMatrixInverse * viewDirectionInViewSpace);
     vec3 normalDirection = normalize(vec3(vec4(varnormal, 0.0) * p3d_ViewMatrix));
-    varreflect = reflect(viewDirection, normalize(normalDirection));
+    varreflect = reflect(varviewdir, normalize(normalDirection));
     // insert by Reflection hack end >
 '''
     # Insert before last brace
@@ -68,7 +75,9 @@ varying vec3 varreflect;
     ins = '''
 // < insert by Reflection hack start (variables)
 varying vec3 varreflect;
-uniform samplerCube cubemap;
+varying vec3 varviewdir;
+uniform mat4 p3d_ViewMatrix; // world to view transformation
+uniform samplerCube <unf_name>;
 // insert by Reflection hack end >
 '''
     # Insert before firs varying declaration
@@ -77,11 +86,23 @@ uniform samplerCube cubemap;
     # TODO: Check input colorspace option. Currently used default sRGB
     ins = '''
     // <-- insert by Reflection hack start
-    vec4 refl_tex = textureCube(cubemap, varreflect);
+    vec4 refl_tex = textureCube(<unf_name>, varreflect);
     srgb_to_linearrgb(refl_tex, refl_tex);
     mtex_rgb_blend(<color_tmp_in>, refl_tex.rgb, refl_tex.a, <blend_val>, <color_tmp_out>);
     // insert by  Reflection hack end -->'''
     ins = ins.replace('<blend_val>', str(envmap.diffuse_color_factor))
+    if normal_tex_count > 0:
+        # Correct Reflection insertion to using normalmap
+        sr = re.findall('mtex_bump_apply\([^;]+(tmp[0-9]+)\);', frag)
+        if sr:
+            normal_tmp = sr[0]
+            ins_repl = '''vec3 varnormal2 = normalize(vec3(vec4(<normal_var>, 0.0) * p3d_ViewMatrix));
+    vec3 varreflect2 = reflect(varviewdir, varnormal2);
+    vec4 refl_tex = textureCube(<unf_name>, varreflect2);'''
+            ins_repl = ins_repl.replace('<normal_var>', normal_tmp)
+            ins = ins.replace('vec4 refl_tex = textureCube(<unf_name>, varreflect);', ins_repl)
+        else:
+            raise Exception('Not found normal variable to reflect')
     if color_tex_count > 0: 
         # Mix with texture color if color texture was found
         sr = re.findall('mtex_image\([\w]+, p3d_Texture%i[\s\S]+?mtex_rgb_blend\([^\)]+(tmp[0-9]+)\);' % (color_tex_idx), frag)
@@ -104,22 +125,28 @@ uniform samplerCube cubemap;
             frag = frag.replace(old_str, new_str)
         else:
             raise Exception('Not found color variable to inject reflection code')
-        
-
+    
+    unf_name = safe_var_name(envmap.texture.name)
+    frag = frag.replace('<unf_name>', unf_name)
+    
     f = open(frag_fname, 'w')
     f.write(frag)
     f.close()
     
     # --- Uniform ---
-    cm_types = {'IMAGE_FILE': 'image_cibemap',
+    cm_types = {'IMAGE_FILE': 'image_cubemap',
                 'STATIC': 'static_cubemap',
                 'ANIMATED': 'dynamic_cubemap'}
     
     uniform = {'datatype': 1,
                'type': cm_types[envmap.texture.environment_map.source],
-               'varname': "cubemap"
+               'varname': unf_name
                 }
     if envmap.texture.environment_map.source in ('STATIC', 'ANIMATED'):
-        uniform['object'] = ''
+        uniform['object'] = envmap.texture.environment_map.viewpoint_object.name
+        uniform['resolution'] = envmap.texture.environment_map.resolution
     else:
-        uniform['image'] = ''
+        saved_img = save_image(envmap.texture.image, fname, all_data['scene']['paths']['images'])
+        val = os.path.split(saved_img)[1]
+        uniform['image'] = val
+    target_data['uniforms'].append(uniform)
