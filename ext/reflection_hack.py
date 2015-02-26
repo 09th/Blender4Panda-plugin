@@ -102,7 +102,10 @@ uniform samplerCube <unf_name>;
             ins_repl = ins_repl.replace('<normal_var>', normal_tmp)
             ins = ins.replace('vec4 refl_tex = textureCube(<unf_name>, varreflect);', ins_repl)
         else:
-            raise Exception('Not found normal variable to reflect')
+            f = open(frag_fname+'.err', 'w')
+            f.write(frag)
+            f.close()
+            raise Exception('Not found normal variable to reflect. ' + material.name)
     if color_tex_count > 0: 
         # Mix with texture color if color texture was found
         sr = re.findall('mtex_image\([\w]+, p3d_Texture%i[\s\S]+?mtex_rgb_blend\([^\)]+(tmp[0-9]+)\);' % (color_tex_idx), frag)
@@ -112,7 +115,7 @@ uniform samplerCube <unf_name>;
             # Insert code after target texture blending
             frag = re.sub('(mtex_rgb_blend\([^\)]+%s\);)' % color_tmp, '\g<1>'+ins, frag, 1)
         else:
-            raise Exception('Not found color variable to inject reflection code')
+            raise Exception('Not found color variable to inject reflection code. ' + material.name)
     else: 
         # If no textures - mix with base diffuse color
         sr = re.findall('(shade_madd\([ \S]+(cons[0-9]+), tmp[0-9]+\);)', frag)
@@ -124,7 +127,7 @@ uniform samplerCube <unf_name>;
             new_str = ins + '\n    ' + new_str
             frag = frag.replace(old_str, new_str)
         else:
-            raise Exception('Not found color variable to inject reflection code')
+            raise Exception('Not found color variable to inject reflection code. ' + material.name)
     
     unf_name = safe_var_name(envmap.texture.name)
     frag = frag.replace('<unf_name>', unf_name)
@@ -150,3 +153,23 @@ uniform samplerCube <unf_name>;
         val = os.path.split(saved_img)[1]
         uniform['image'] = val
     target_data['uniforms'].append(uniform)
+
+'''
+vec3 bpcem (in vec3 v, vec3 Emax, vec3 Emin, vec3 Epos)
+{	
+	vec3 nrdir = normalize(v);
+	vec3 rbmax = (Emax - Epos)/nrdir;
+	vec3 rbmin = (Emin - Epos)/nrdir;
+	
+	vec3 rbminmax;
+	rbminmax.x = (nrdir.x>0.0)?rbmax.x:rbmin.x;
+	rbminmax.y = (nrdir.y>0.0)?rbmax.y:rbmin.y;
+	rbminmax.z = (nrdir.z>0.0)?rbmax.z:rbmin.z;
+	float fa = min(min(rbminmax.x, rbminmax.y), rbminmax.z);
+	vec3 posonbox = Epos + nrdir * fa;
+	//return posonbox - Epos;
+	return  Epos - posonbox;
+}
+
+varreflect2 = bpcem(varreflect2, vec3(-4.0, -4.0, 0.0), vec3(4.0, 4.0, 3.0), vec3(0.0, 0.0, 1.5));
+'''

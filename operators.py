@@ -617,12 +617,13 @@ class ExportScene(bpy.types.Operator, ExportHelper):
                 e.invoke(export_dict, export_dict['scene'], context, self.filepath, flags)
             elif e.target == 'material':
                 for material in bpy.data.materials:
-                    mat_dict = {}
-                    if material.name in export_dict['materials']:
-                        mat_dict = export_dict['materials'][material.name]
-                    e.invoke(export_dict, mat_dict, material, context, self.filepath, flags)
-                    if mat_dict:
-                        export_dict['materials'][material.name] = mat_dict
+                    if material.users > 0:
+                        mat_dict = {}
+                        if material.name in export_dict['materials']:
+                            mat_dict = export_dict['materials'][material.name]
+                        e.invoke(export_dict, mat_dict, material, context, self.filepath, flags)
+                        if mat_dict:
+                            export_dict['materials'][material.name] = mat_dict
             elif e.target == 'object':
                 for obj in context.scene.objects:
                     obj_dict = {}

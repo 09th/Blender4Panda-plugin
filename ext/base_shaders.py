@@ -231,6 +231,8 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
     dirname = os.path.dirname(fname)
     if 'paths' in all_data['scene']:
         dirname = os.path.join(dirname, all_data['scene']['paths']['materials'])
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
     sha = gpu.export_shader(context.scene, material)
     add_lamp_name_for_unf_type16(sha)
     find_and_correct_spot_light_uniforms(material, sha)
