@@ -34,6 +34,7 @@ class SketchAssets(Operator):
         self.show_manipulator = None
         self.last_object = None
         self.selected_object = None
+        self.current_context = None
         
         bpy.context.window_manager.se4p3d_assets_placing_enabled = True
     
@@ -73,39 +74,41 @@ class SketchAssets(Operator):
         object.scale = scale
     
     
-    def copy_from_asset(self, asset, parent = None, iteration=0):
-        bpy.context.scene.objects.active = None
-        if iteration == 0:
-            parent = bpy.data.objects[asset.ref_object_name].copy()
-            bpy.context.scene.objects.link(parent)
-            parent['asset'] = True
-            parent['type'] = asset.type
-            parent['asset_name'] = asset.name
-            parent['canvas'] = asset.use_as_canvas
-        '''
-        for child in parent.children:
-            dupli_child = child.copy()
-            bpy.context.scene.objects.link(dupli_child)
-            dupli_child.parent = parent
-            
-            dupli_child['asset'] = True
-            dupli_child['type'] = 'OBJECT'
-            dupli_child['asset_name'] = asset.name
-            dupli_child['canvas'] = asset.use_as_canvas
-            
-            for child_child in child.children:
-                self.copy_from_asset(asset, child, iteration + 1)
-        '''
-        parent.draw_type = 'TEXTURED'
-        parent.show_name = False
-
-        for object in bpy.context.selected_objects:
-            object.select = False 
-            
-        bpy.context.scene.objects.active = parent
-        parent.select = True
-        return parent
+    def find_asset_root(self, ob, asset = None):
+        if not asset:
+            if 'asset' in ob:
+                asset = ob['asset']
+            else:
+                return None
+        if ob.parent:
+            if 'asset' in ob.parent:
+                if ob.parent['asset'] == asset:
+                    return self.find_asset_root(ob.parent)
+                else:
+                    return ob
+            else:
+                return ob
     
+    
+    def copy_from_asset(self, asset, current_asset_child = None, current_copy_child = None):
+        if not current_asset_child:
+            current_asset_child = bpy.data.objects[asset.ref_object_name]
+        new_copy_child = current_asset_child.copy()
+        if current_copy_child:
+            new_copy_child.parent = current_copy_child
+            new_copy_child['asset_child'] = True
+        for child in current_asset_child.children:
+            self.copy_from_asset(asset, child, new_copy_child)
+        
+        new_copy_child['asset'] = True
+        new_copy_child['type'] = asset.type
+        new_copy_child['asset_name'] = asset.name
+        new_copy_child['canvas'] = asset.use_as_canvas
+        new_copy_child.draw_type = 'TEXTURED'
+        new_copy_child.show_name = False
+        return new_copy_child
+        
+        
     def get_ground_align_matrix(self, norm, pos, asset):
         scale = bpy.data.objects[asset.ref_object_name].scale.to_tuple()
         m = Matrix()
@@ -126,7 +129,7 @@ class SketchAssets(Operator):
         #ob = bpy.data.objects[asset.ref_object_name]
         #if asset.type in ['OBJECT', 'EMPTY', 'LAMP', 'SOUND']:
         copy = self.copy_from_asset(asset)
-        asset_obj = bpy.data.objects[asset.ref_object_name]
+        #asset_obj = bpy.data.objects[asset.ref_object_name]
         #elif asset.type == 'GROUP':
         #    group = bpy.data.groups[asset.ref_object_name]
         #    if len(group.objects)>0:
@@ -140,6 +143,10 @@ class SketchAssets(Operator):
         #else:
         #    copy = None    
         if copy != None:
+            link_recursively(copy, self.current_context)
+            #set_attr_recursively(copy, 'draw_type', 'TEXTURED')
+            #set_attr_recursively(copy, 'show_name', False)
+
             #bpy.context.scene.objects.link(copy)
             ###
             '''
@@ -206,6 +213,8 @@ class SketchAssets(Operator):
         self.counter += 1
     
     def modal(self, context, event):
+        
+        self.current_context = context
         
         if len(context.scene.se4p3d.assets_list) > 0:
             if context.scene.se4p3d.assets_list_index >= len(context.scene.se4p3d.assets_list):
@@ -287,7 +296,8 @@ class SketchAssets(Operator):
             
             ### Cast Ray from mousePosition and set Cursor to hitPoint
             if asset.ref_object_name in context.scene.objects:
-                context.scene.objects.unlink(bpy.data.objects[asset.ref_object_name])
+                #context.scene.objects.unlink(bpy.data.objects[asset.ref_object_name])
+                unlink_recursively(bpy.data.objects[asset.ref_object_name], context)
             ray_start,ray_end, ray = self.project_cursor(event)
             ray_hit = ray[0]
             ray_hit_object = ray[1]
@@ -307,9 +317,11 @@ class SketchAssets(Operator):
                 ###
                 if (ray_hit_object and ('asset' not in ray_hit_object or ('canvas' in ray_hit_object and ray_hit_object['canvas']))) or not ray_hit_object:
                     if not self.mouse_click and not (event.ctrl or event.shift):
+                        # Show asset as cursor
                         asset_obj = bpy.data.objects[asset.ref_object_name]
                         if asset.ref_object_name not in context.scene.objects:
-                            context.scene.objects.link(asset_obj)
+                            link_recursively(asset_obj, context)
+                            #context.scene.objects.link(asset_obj)
                         #asset_obj.location = self.cur_pos
                         if event.alt:
                             if event.type in ('WHEELUPMOUSE', 'WHEELDOWNMOUSE'):
@@ -378,6 +390,7 @@ class SketchAssets(Operator):
                         self.selected_object = object
                         self.selected_object.select = True
                         bpy.context.scene.objects.active = self.selected_object
+                        #root = self.find_asset_root(ob)
                     
                     if self.mouse_click and self.selected_object:
                         #print(event.ctrl, event.shift)
@@ -403,7 +416,8 @@ class SketchAssets(Operator):
         else:
             bpy.context.window.cursor_modal_set("DEFAULT")
             if asset.ref_object_name in context.scene.objects:
-                context.scene.objects.unlink(bpy.data.objects[asset.ref_object_name])
+                #context.scene.objects.unlink(bpy.data.objects[asset.ref_object_name])
+                unlink_recursively(bpy.data.objects[asset.ref_object_name], context)
         
         if event.type == "ESC" and event.value == 'CLICK':
             if self.mouse_click:
@@ -416,7 +430,8 @@ class SketchAssets(Operator):
             context.space_data.show_manipulator = self.show_manipulator
             context.space_data.region_3d.view_perspective = self.viewport_mode
             if asset.ref_object_name in context.scene.objects:
-                context.scene.objects.unlink(bpy.data.objects[asset.ref_object_name])
+                #context.scene.objects.unlink(bpy.data.objects[asset.ref_object_name])
+                unlink_recursively(bpy.data.objects[asset.ref_object_name], context)
             return{'FINISHED'}
         return {'PASS_THROUGH'}
         #return {'RUNNING_MODAL'}
@@ -477,7 +492,31 @@ class AddObjectToAssetsSurfaceList(Operator):
         
         return{'FINISHED'}
 '''
-        
+
+def unlink_recursively(ob, context):
+    for cild in ob.children:
+        unlink_recursively(cild, context)
+    if ob in context.scene.objects[:]:
+        context.scene.objects.unlink(ob)
+    else:
+        print(ob, 'not in scene')
+
+
+def link_recursively(ob, context):
+    for cild in ob.children:
+        link_recursively(cild, context)
+    if ob not in context.scene.objects[:]:
+        context.scene.objects.link(ob)
+    else:
+        print(ob, 'already in scene')
+
+
+def set_attr_recursively(ob, attr, val):
+    for cild in ob.children:
+        set_attr_recursively(cild, attr, val)
+    ob.__setattr__(attr, val)
+
+
 def add_object_to_assetslist(ob, context):
     #if 'asset' in ob:
     #    return
@@ -485,13 +524,15 @@ def add_object_to_assetslist(ob, context):
     item.name = ob.name
     item.ref_object_name = ob.name
     
+    '''
     if ob.type == "MESH":
         item.type = 'OBJECT'
     elif ob.type == "EMPTY":
         item.type = 'EMPTY'
     elif ob.type == "LAMP":
         item.type = 'LAMP'
-    
+    '''
+    item.type = ob.type
     #item2 = context.scene.se4p3d.assets_list.add()
     #item2.name = context.scene.objects.active.name
     #if ob.type == "MESH":
@@ -499,10 +540,14 @@ def add_object_to_assetslist(ob, context):
     #elif ob.type == "EMPTY":
     #    item2.type = 'EMPTY'
     context.scene.se4p3d.assets_list_index = len(context.scene.se4p3d.assets_list)-1
-    ob.draw_type = 'WIRE'
-    ob.show_name = True
+    #ob.draw_type = 'WIRE'
+    #ob.show_name = True
+    #ob.draw_type = 'WIRE'
+    #ob.show_name = True
+    set_attr_recursively(ob, 'draw_type', 'WIRE')
+    set_attr_recursively(ob, 'show_name', True)
     if ob.name in context.scene.objects:
-        context.scene.objects.unlink(ob)
+        unlink_recursively(ob, context)
     return True
 
         
