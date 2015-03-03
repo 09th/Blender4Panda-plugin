@@ -74,21 +74,34 @@ class SketchAssets(Operator):
         object.scale = scale
     
     
-    def find_asset_root(self, ob, asset = None):
-        if not asset:
-            if 'asset' in ob:
-                asset = ob['asset']
-            else:
-                return None
+    def find_asset_root(self, ob, asset):
         if ob.parent:
             if 'asset' in ob.parent:
                 if ob.parent['asset'] == asset:
-                    return self.find_asset_root(ob.parent)
-                else:
-                    return ob
-            else:
-                return ob
+                    return self.find_asset_root(ob.parent, asset)
+        return ob
     
+    
+    def do_with_asset_exemplar(self, ob, asset, action, init = False):
+        if 'asset' not in ob:
+            return
+        if ob['asset'] != asset:
+            return
+        if init:
+            bpy.ops.object.select_all(action='DESELECT')
+            root = self.find_asset_root(ob, asset)
+            if root != ob:
+                ob = root
+        self.selected_object = ob
+        self.selected_object.select = True
+        if init:
+            bpy.context.scene.objects.active = self.selected_object
+        for child in ob.children:
+            self.do_with_asset_exemplar(child, asset, action)
+            
+        if action == 'DELETE' and init:
+            bpy.ops.object.delete(use_global=False)
+        
     
     def copy_from_asset(self, asset, current_asset_child = None, current_copy_child = None):
         if not current_asset_child:
@@ -386,17 +399,17 @@ class SketchAssets(Operator):
                         else:
                             object = ray_hit_object
                     if object and 'asset' in object and not object['canvas']:
-                        bpy.ops.object.select_all(action='DESELECT')
-                        self.selected_object = object
-                        self.selected_object.select = True
-                        bpy.context.scene.objects.active = self.selected_object
-                        #root = self.find_asset_root(ob)
+                        self.do_with_asset_exemplar(object, object['asset'], 'SELECT', True)
+
                     
                     if self.mouse_click and self.selected_object:
                         #print(event.ctrl, event.shift)
                         ### delete selected object
                         if event.ctrl:
-                            delete_recursive(self.selected_object)
+                            #delete_recursive(self.selected_object)
+                            self.do_with_asset_exemplar(self.selected_object, 
+                                                        self.selected_object['asset'], 
+                                                        'DELETE', True)
                             self.selected_object = None
                         ### pick selected object form list
                         if event.shift:
