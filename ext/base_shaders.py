@@ -12,7 +12,15 @@ SHARED_TYPES = {gpu.GPU_DYNAMIC_LAMP_DYNVEC:'vec',
                 gpu.GPU_DYNAMIC_SAMPLER_2DSHADOW:'shadow_samp',
                 'distance':'distance',
                 'spot_cutoff': 'cutoff',
-                'spot_blend': 'blend'
+                'spot_blend': 'blend',
+                #21: 'use_mist', # GPU_DYNAMIC_MIST_ENABLE = 21,
+                22: 'mist_start', # GPU_DYNAMIC_MIST_START = 22,
+                23: 'mist_distance', # GPU_DYNAMIC_MIST_DISTANCE = 23,
+                24: 'mist_intensity', # GPU_DYNAMIC_MIST_INTENSITY = 24,
+                25: 'mist_type', # GPU_DYNAMIC_MIST_TYPE = 25,
+                26: 'mist_color', # GPU_DYNAMIC_MIST_COLOR = 26,
+                27: 'horizon_color', # GPU_DYNAMIC_HORIZON_COLOR = 27,
+                28: 'ambient_color' # GPU_DYNAMIC_AMBIENT_COLOR = 28,
                }
 
 #import bpy, os, sys, shutil
@@ -207,6 +215,34 @@ def add_lamp_name_for_unf_type16(sha):
                         sha['uniforms'][i]['type'] = 'distance'
 
 
+def add_environment_values_for_unf_type21_28(sha, mat, wrld):
+    for i, unf in enumerate(sha['uniforms']):
+        value = 0
+        if unf['type'] == 21:
+            value = float(mat.use_mist)
+        elif unf['type'] == 22:
+            value = wrld.mist_settings.start
+        elif unf['type'] == 23:
+            value = wrld.mist_settings.depth
+        elif unf['type'] == 24:
+            value = wrld.mist_settings.intensity
+        elif unf['type'] == 25:
+            mist_types = {'QUADRATIC': 0.0, 
+                          'LINEAR': 1.0, 
+                          'INVERSE_QUADRATIC': 0.5
+                        }
+            value = mist_types[wrld.mist_settings.falloff]
+        elif unf['type'] == 26:
+            value = wrld.horizon_color[:]
+        elif unf['type'] == 27:
+            value = wrld.horizon_color[:]
+        elif unf['type'] == 28:
+            value = wrld.ambient_color[:]
+        
+        if unf['type'] in range(21,29):
+            sha['uniforms'][i]['value'] = value
+
+
 def solve_duplicate_names(sha, name, cnt=0):
     for i, unf in enumerate(sha['uniforms']):
         if unf['varname'] == name:
@@ -216,16 +252,18 @@ def solve_duplicate_names(sha, name, cnt=0):
 def replace_names_for_shared_uniforms(sha):
     for i, unf in enumerate(sha['uniforms']):
         if unf['type'] in SHARED_TYPES.keys():
+            new_varname = unf['varname']
             if 'lamp' in unf:
                 new_varname = safe_var_name(unf['lamp'].name + '_'\
                               + SHARED_TYPES[unf['type']]\
                               + '_' + str(unf['datatype']))
-                new_varname = solve_duplicate_names(sha, new_varname)
-                #sha['fragment'] = sha['fragment'].replace(unf['varname'], new_varname)
-                sha['fragment'] = re.sub(unf['varname']+'([^a-zA-Z0-9_]+)', new_varname+'\g<1>', sha['fragment'])
-                sha['uniforms'][i]['varname'] = new_varname
+            elif unf['type'] in range(21,29):
+                new_varname = SHARED_TYPES[unf['type']]
             else:
-                print(unf, 'WARNING: hasn\'t lamp attribute')
+                print(unf, 'WARNING: can\'t process shared uniform')
+            new_varname = solve_duplicate_names(sha, new_varname)
+            sha['fragment'] = re.sub(unf['varname']+'([^a-zA-Z0-9_]+)', new_varname+'\g<1>', sha['fragment'])
+            sha['uniforms'][i]['varname'] = new_varname
 
 def invoke(all_data, target_data, material, context, fname, flags=None):
     dirname = os.path.dirname(fname)
@@ -235,6 +273,7 @@ def invoke(all_data, target_data, material, context, fname, flags=None):
         os.makedirs(dirname)
     sha = gpu.export_shader(context.scene, material)
     add_lamp_name_for_unf_type16(sha)
+    add_environment_values_for_unf_type21_28(sha, material, context.scene.world)
     find_and_correct_spot_light_uniforms(material, sha)
     replace_names_for_shared_uniforms(sha)
     replace_common_uniforms(sha)
